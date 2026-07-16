@@ -54,7 +54,11 @@ face-rec group requete.jpg --face 0             # choisir un visage par index, s
 face-rec group requete.jpg --coords 320,240     # choisir le visage le plus proche du pixel
 face-rec group requete.jpg --threshold 0.5      # seuil de similarité (défaut 0.40)
 face-rec group requete.jpg --json               # sortie JSON (chemins + similarité + pose)
+face-rec group requete.jpg --plain              # chemins seuls, 1 par ligne (pour le shell)
 face-rec group requete.jpg --no-forcing         # ignorer les liens manuels force-group
+
+# Ouvrir directement les images qui matchent:
+xv $(face-rec group --db faces.db requete.jpg --plain)
 
 # 3. Lier manuellement des images (profil + face non reconnus automatiquement)
 face-rec force-group face.jpg profil.jpg        # 2+ images, 1 visage chacune, = même personne
@@ -103,6 +107,7 @@ déjà existante) sont détectées et refusées.
 | `--coords X,Y` | Sélection du visage par pixel (pas de prompt) |
 | `--face N` | Sélection du visage par index (pas de prompt) |
 | `--reindex` | Ré-indexe même les fichiers inchangés |
+| `--plain` | (group) chemins seuls, 1 par ligne, sur stdout (le reste va sur stderr) |
 | `--no-forcing` | (group) ignore les liens manuels force-group |
 | `--dry-run` | (replace-path) prévisualise sans écrire |
 

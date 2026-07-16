@@ -189,6 +189,43 @@ def test_replace_path_dry_run_then_apply(tmp_path: Path) -> None:
         assert db.all_image_paths() == ["/new/a.jpg"]
 
 
+def test_group_plain_outputs_paths_only(tmp_path: Path) -> None:
+    db_path = tmp_path / "faces.db"
+    query = tmp_path / "q.jpg"
+    query.write_bytes(b"x")
+    target = make_face(seed=1)
+    with FaceDatabase(db_path) as db:
+        db.add_image(Path("/c/target.jpg"), 1.0, [target], "buffalo_l")
+    with _patch_engine([target]):
+        result = runner.invoke(cli.app, ["group", str(query), "--db", str(db_path), "--plain", "--threshold", "0.5"])
+    assert result.exit_code == 0, result.stdout
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    assert lines == ["/c/target.jpg"]  # exactly the path, nothing else
+
+
+def test_group_plain_no_match_is_empty(tmp_path: Path) -> None:
+    db_path = tmp_path / "faces.db"
+    query = tmp_path / "q.jpg"
+    query.write_bytes(b"x")
+    with FaceDatabase(db_path) as db:
+        db.add_image(Path("/c/other.jpg"), 1.0, [make_face(seed=999)], "buffalo_l")
+    with _patch_engine([make_face(seed=1)]):
+        result = runner.invoke(cli.app, ["group", str(query), "--db", str(db_path), "--plain", "--threshold", "0.9"])
+    assert result.exit_code == 0
+    assert result.stdout.strip() == ""  # no match -> empty stdout
+
+
+def test_group_plain_and_json_mutually_exclusive(tmp_path: Path) -> None:
+    db_path = tmp_path / "faces.db"
+    query = tmp_path / "q.jpg"
+    query.write_bytes(b"x")
+    with FaceDatabase(db_path):
+        pass
+    with _patch_engine([make_face(seed=1)]):
+        result = runner.invoke(cli.app, ["group", str(query), "--db", str(db_path), "--plain", "--json"])
+    assert result.exit_code != 0
+
+
 def test_info_reports_forced_links(tmp_path: Path) -> None:
     db_path = tmp_path / "faces.db"
     with FaceDatabase(db_path) as db:

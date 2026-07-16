@@ -27,6 +27,7 @@ from face_rec.service import FaceService, ForceGroupError, ReplacePathError, Rew
 app = typer.Typer(add_completion=False, help="Index faces in an image collection and find a person across it.")
 logger = logging.getLogger(__name__)
 console = Console()
+console_err = Console(stderr=True)
 
 
 def _parse_coords(raw: str | None) -> tuple[float, float] | None:
@@ -92,15 +93,21 @@ def group(
     coords: Annotated[str | None, typer.Option(help="Pixel 'X,Y'; pick the nearest face, no prompt.")] = None,
     face_index: Annotated[int | None, typer.Option("--face", help="Explicit face index (skip the prompt).")] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Emit JSON instead of a table.")] = False,
+    plain: Annotated[
+        bool, typer.Option("--plain", help="Emit only matching file paths, one per line (for shell use).")
+    ] = False,
     no_forcing: Annotated[bool, typer.Option("--no-forcing", help="Ignore manual force-group links.")] = False,
     verbose: Annotated[int, typer.Option("--verbose", "-v", count=True, help="Increase verbosity.")] = 0,
 ) -> None:
     """Find every collection image containing the person selected in IMAGE.
 
     By default both embedding recognition and manual force-group links are used;
-    pass --no-forcing to restrict results to embedding recognition only.
+    pass --no-forcing to restrict results to embedding recognition only. Use --plain
+    to emit only paths (one per line) for shell substitution: xv $(face-rec group ...).
     """
     setup_logging(verbose)
+    if as_json and plain:
+        raise typer.BadParameter("--json and --plain are mutually exclusive.")
     if not image.is_file():
         raise typer.BadParameter(f"Not a file: {image}")
     point = _parse_coords(coords)
@@ -111,11 +118,17 @@ def group(
         service = FaceService(engine, database)
         faces = service.detect_query_faces(image)
         if not faces:
-            console.print("[yellow]No face detected in the query image.[/yellow]")
+            # In --plain, stdout must stay path-only; report on stderr, exit non-zero.
+            _err("No face detected in the query image.", plain)
             raise typer.Exit(code=1)
 
-        chosen = _resolve_face(faces, point, face_index)
+        chosen = _resolve_face(faces, point, face_index, plain=plain)
         matches = service.find_matches(chosen, settings.threshold, use_forcing=not no_forcing)
+
+    if plain:
+        for m in matches:
+            typer.echo(m.image_path)
+        return
 
     if as_json:
         payload = {
@@ -151,12 +164,26 @@ def group(
     console.print(table)
 
 
+def _err(message: str, plain: bool) -> None:
+    """Print a status message. On stderr in --plain mode so stdout stays path-only."""
+    if plain:
+        console_err.print(f"[yellow]{message}[/yellow]")
+    else:
+        console.print(f"[yellow]{message}[/yellow]")
+
+
 def _resolve_face(
     faces: list[DetectedFace],
     point: tuple[float, float] | None,
     face_index: int | None,
+    *,
+    plain: bool = False,
 ) -> DetectedFace:
-    """Decide which detected face to use, prompting only when necessary."""
+    """Decide which detected face to use, prompting only when necessary.
+
+    In --plain mode the disambiguation table and prompt go to stderr so that a
+    shell $(...) capture of stdout only ever sees file paths.
+    """
     if face_index is not None:
         if not 0 <= face_index < len(faces):
             raise typer.BadParameter(f"--face must be in [0, {len(faces) - 1}]")
@@ -166,9 +193,10 @@ def _resolve_face(
     if chosen is not None:
         return chosen
 
-    # Multiple faces, no disambiguation: show the table and prompt.
-    console.print(_face_table(faces))
-    idx = int(typer.prompt(f"Which face? [0-{len(faces) - 1}]", type=int))
+    # Multiple faces, no disambiguation: show the table and prompt. Route both to
+    # stderr in --plain mode so stdout stays path-only for shell capture.
+    (console_err if plain else console).print(_face_table(faces))
+    idx = int(typer.prompt(f"Which face? [0-{len(faces) - 1}]", type=int, err=plain))
     if not 0 <= idx < len(faces):
         raise typer.BadParameter(f"choice must be in [0, {len(faces) - 1}]")
     return faces[idx]
