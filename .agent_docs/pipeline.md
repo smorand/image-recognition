@@ -45,8 +45,16 @@ sqlite-vec renvoie la **distance cosinus** (0 = identique). On convertit
 le meilleur visage par image (une image multi-personnes ne remonte qu'une fois pour
 la personne cherchée).
 
-**k obligatoire**: sqlite-vec exige `k = N` dans la clause WHERE pour un KNN. On
-demande large (limit=200) puis on filtre par seuil côté Python.
+**k obligatoire**: sqlite-vec exige `k = N` dans la clause WHERE pour un KNN.
+`search(limit=None)` (défaut) pose `k = COUNT(*) vec_faces`, soit tous les visages,
+puis filtre par seuil côté Python. Pas de cap fixe (l'ancien `limit=200` tronquait
+silencieusement une personne présente dans >200 images). `k` doit couvrir toute la
+table car le filtre `model_name` est appliqué APRÈS le KNN.
+
+**--limit (group)**: plafonne les matchs de *reconnaissance* (meilleurs d'abord).
+Défaut illimité (`DEFAULT_LIMIT=None`, même pattern que `DEFAULT_THRESHOLD`). Le
+forcing se propage à travers l'ensemble reconnu COMPLET (avant cap), et les matchs
+forcés ne sont jamais tronqués par `--limit`.
 
 ## Sélection du visage requête (service.select_face)
 

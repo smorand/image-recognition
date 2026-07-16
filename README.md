@@ -101,13 +101,15 @@ déjà existante) sont détectées et refusées.
 
 | Option | Rôle |
 |--------|------|
-| `--db PATH` | Chemin de la base SQLite (défaut `faces.db`) |
+| `--db PATH` / `-D` | Chemin de la base SQLite (défaut `faces.db`) |
 | `--model NAME` | Pack de modèles InsightFace (défaut `buffalo_l`) |
-| `--threshold F` | Seuil de similarité cosinus 0..1 (défaut 0.40) |
+| `--threshold F` / `-t` | Seuil de similarité cosinus 0..1 (défaut 0.40) |
+| `--limit N` / `-l` | (group) max de matchs de reconnaissance, meilleurs d'abord (défaut illimité; liens forcés jamais tronqués) |
 | `--coords X,Y` | Sélection du visage par pixel (pas de prompt) |
 | `--face N` | Sélection du visage par index (pas de prompt) |
 | `--reindex` | Ré-indexe même les fichiers inchangés |
-| `--plain` | (group) chemins seuls, 1 par ligne, sur stdout (le reste va sur stderr) |
+| `--json` / `-J` | (group) sortie JSON |
+| `--plain` / `-P` | (group) chemins seuls, 1 par ligne, sur stdout (le reste va sur stderr) |
 | `--no-forcing` | (group) ignore les liens manuels force-group |
 | `--dry-run` | (replace-path) prévisualise sans écrire |
 

@@ -49,6 +49,18 @@ def test_search_finds_exact_and_respects_threshold(tmp_path: Path) -> None:
         assert db.search(random_vec, "buffalo_l", threshold=0.9) == []
 
 
+def test_search_returns_more_than_200_matches(tmp_path: Path) -> None:
+    """Regression: no fixed 200 cap. A person in >200 images must all come back."""
+    with FaceDatabase(tmp_path / "t.db") as db:
+        target = make_face(seed=1)
+        # 250 near-identical faces (tiny jitter keeps them well above threshold).
+        for i in range(250):
+            f = make_face(seed=1)  # same embedding
+            db.add_image(Path(f"/img/{i:03d}.jpg"), 1.0, [f], "buffalo_l")
+        hits = db.search(target.embedding, "buffalo_l", threshold=0.9)
+        assert len(hits) == 250
+
+
 def test_search_isolates_by_model(tmp_path: Path) -> None:
     with FaceDatabase(tmp_path / "t.db") as db:
         face = make_face(seed=1)

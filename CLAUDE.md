@@ -19,7 +19,8 @@ make check         # Full quality gate (lint, format, typecheck, security, tests
 make install       # Install the face-rec command globally (uv tool)
 
 face-rec load <folder> [--db faces.db] [--model buffalo_l] [--reindex]
-face-rec group <image> [--coords X,Y] [--face N] [--threshold 0.40] [--json|--plain] [--no-forcing]
+face-rec group <image> [-D db] [--coords X,Y] [--face N] [-t 0.40] [-l N] [-J|-P] [--no-forcing]
+#   short flags: -D=--db  -t=--threshold  -l=--limit  -J=--json  -P=--plain
 face-rec force-group <img1> <img2> ... [--db faces.db]   # manual same-person links
 face-rec replace-path <regex> <repl> [--dry-run]         # rewrite stored paths
 face-rec info [--db faces.db] [--model buffalo_l]
@@ -54,6 +55,12 @@ src/face_rec/
 - **--plain**: stdout = paths only (one per line) for `xv $(face-rec group ...)`.
   Status messages, the multi-face table and prompt go to stderr (`console_err`,
   `typer.prompt(err=True)`) so stdout stays capturable. Mutually exclusive with --json.
+- **--limit**: caps recognition rows (best first); default unlimited (`DEFAULT_LIMIT`
+  in config). Forcing propagates through the FULL pre-limit recognition set and
+  forced matches are never truncated. DB `search(limit=None)` => k = all faces in
+  vec_faces (no silent 200 cap; k must cover the table since model filter is post-KNN).
+- **Short flags**: -D/--db (all cmds), -t/--threshold, -l/--limit, -J/--json,
+  -P/--plain (group).
 - **Model tag per embedding**: embeddings are only compared within the same
   `model_name`. Changing `--model` requires re-indexing.
 - **Cosine similarity** decides identity; sqlite-vec `distance_metric=cosine`,

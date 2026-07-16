@@ -225,13 +225,21 @@ class FaceDatabase:
         return BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2), Pose(yaw=yaw, pitch=pitch, roll=roll)
 
     def search(
-        self, embedding: NDArray[np.float32], model_name: str, threshold: float, limit: int = 200
+        self, embedding: NDArray[np.float32], model_name: str, threshold: float, limit: int | None = None
     ) -> list[MatchRow]:
         """Return faces whose cosine similarity to embedding is >= threshold.
 
         sqlite-vec exposes cosine *distance* (1 - cosine similarity). We ask for the
         nearest neighbors, then convert and filter by the similarity threshold.
+
+        sqlite-vec KNN requires an explicit k. Since the model filter is applied
+        *after* the KNN, k must cover the whole vec_faces table, otherwise matches
+        could be truncated (a fixed cap would silently drop results on large bases
+        or when a person appears in many images). Defaults to "all faces".
         """
+        if limit is None:
+            row = self._conn.execute("SELECT COUNT(*) FROM vec_faces").fetchone()
+            limit = max(1, int(row[0]))
         query = embedding.astype(np.float32).tobytes()
         rows = self._conn.execute(
             """

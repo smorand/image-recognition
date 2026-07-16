@@ -64,7 +64,7 @@ def _face_table(faces: list[DetectedFace]) -> Table:
 @app.command()
 def load(
     folder: Annotated[Path, typer.Argument(help="Folder of images to index (recursive).")],
-    db: Annotated[Path, typer.Option(help="SQLite database path.")] = Path("faces.db"),
+    db: Annotated[Path, typer.Option("--db", "-D", help="SQLite database path.")] = Path("faces.db"),
     model: Annotated[str, typer.Option(help="InsightFace model pack.")] = "buffalo_l",
     reindex: Annotated[bool, typer.Option(help="Re-index even unchanged files.")] = False,
     verbose: Annotated[int, typer.Option("--verbose", "-v", count=True, help="Increase verbosity.")] = 0,
@@ -87,14 +87,18 @@ def load(
 @app.command()
 def group(
     image: Annotated[Path, typer.Argument(help="Query image (may be outside the collection).")],
-    db: Annotated[Path, typer.Option(help="SQLite database path.")] = Path("faces.db"),
+    db: Annotated[Path, typer.Option("--db", "-D", help="SQLite database path.")] = Path("faces.db"),
     model: Annotated[str, typer.Option(help="Model pack; must match the one used at load.")] = "buffalo_l",
-    threshold: Annotated[float, typer.Option(help="Cosine-similarity threshold (0..1).")] = 0.40,
+    threshold: Annotated[float, typer.Option("--threshold", "-t", help="Cosine-similarity threshold (0..1).")] = 0.40,
+    limit: Annotated[
+        int | None, typer.Option("--limit", "-l", help="Max recognition matches (best first). Default: unlimited.")
+    ] = None,
     coords: Annotated[str | None, typer.Option(help="Pixel 'X,Y'; pick the nearest face, no prompt.")] = None,
     face_index: Annotated[int | None, typer.Option("--face", help="Explicit face index (skip the prompt).")] = None,
-    as_json: Annotated[bool, typer.Option("--json", help="Emit JSON instead of a table.")] = False,
+    as_json: Annotated[bool, typer.Option("--json", "-J", help="Emit JSON instead of a table.")] = False,
     plain: Annotated[
-        bool, typer.Option("--plain", help="Emit only matching file paths, one per line (for shell use).")
+        bool,
+        typer.Option("--plain", "-P", help="Emit only matching file paths, one per line (for shell use)."),
     ] = False,
     no_forcing: Annotated[bool, typer.Option("--no-forcing", help="Ignore manual force-group links.")] = False,
     verbose: Annotated[int, typer.Option("--verbose", "-v", count=True, help="Increase verbosity.")] = 0,
@@ -112,7 +116,9 @@ def group(
         raise typer.BadParameter(f"Not a file: {image}")
     point = _parse_coords(coords)
 
-    settings = Settings(db_path=db, model_name=model, threshold=threshold)
+    if limit is not None and limit < 1:
+        raise typer.BadParameter("--limit must be >= 1.")
+    settings = Settings(db_path=db, model_name=model, threshold=threshold, limit=limit)
     engine = FaceEngine(settings.model_name, settings.det_size)
     with FaceDatabase(settings.db_path) as database:
         service = FaceService(engine, database)
@@ -123,7 +129,7 @@ def group(
             raise typer.Exit(code=1)
 
         chosen = _resolve_face(faces, point, face_index, plain=plain)
-        matches = service.find_matches(chosen, settings.threshold, use_forcing=not no_forcing)
+        matches = service.find_matches(chosen, settings.threshold, use_forcing=not no_forcing, limit=settings.limit)
 
     if plain:
         for m in matches:
@@ -134,6 +140,7 @@ def group(
         payload = {
             "query": str(image),
             "threshold": settings.threshold,
+            "limit": settings.limit,
             "model": settings.model_name,
             "forcing": not no_forcing,
             "matches": [
@@ -204,7 +211,7 @@ def _resolve_face(
 
 @app.command()
 def info(
-    db: Annotated[Path, typer.Option(help="SQLite database path.")] = Path("faces.db"),
+    db: Annotated[Path, typer.Option("--db", "-D", help="SQLite database path.")] = Path("faces.db"),
     model: Annotated[str, typer.Option(help="Model pack.")] = "buffalo_l",
 ) -> None:
     """Show the number of indexed faces and forced links."""
@@ -220,7 +227,7 @@ def info(
 @app.command(name="force-group")
 def force_group(
     images: Annotated[list[Path], typer.Argument(help="Two or more images of the SAME person.")],
-    db: Annotated[Path, typer.Option(help="SQLite database path.")] = Path("faces.db"),
+    db: Annotated[Path, typer.Option("--db", "-D", help="SQLite database path.")] = Path("faces.db"),
     model: Annotated[str, typer.Option(help="Model pack.")] = "buffalo_l",
     verbose: Annotated[int, typer.Option("--verbose", "-v", count=True, help="Increase verbosity.")] = 0,
 ) -> None:
@@ -246,7 +253,7 @@ def force_group(
 def replace_path(
     pattern: Annotated[str, typer.Argument(help="Python regex to match against stored paths.")],
     repl: Annotated[str, typer.Argument(help="Replacement (supports backrefs like \\1, \\g<name>).")],
-    db: Annotated[Path, typer.Option(help="SQLite database path.")] = Path("faces.db"),
+    db: Annotated[Path, typer.Option("--db", "-D", help="SQLite database path.")] = Path("faces.db"),
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Show changes without applying them.")] = False,
 ) -> None:
     """Rewrite stored image and forced-link paths via a regex substitution.

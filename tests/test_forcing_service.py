@@ -55,6 +55,38 @@ def test_no_forcing_excludes_forced_only_matches(tmp_path: Path) -> None:
         assert paths == {"/c/face.jpg"}  # only recognition
 
 
+def test_limit_caps_recognition_but_not_forced(tmp_path: Path) -> None:
+    with FaceDatabase(tmp_path / "t.db") as db:
+        target = make_face(seed=1)
+        # 5 recognized images (identical embedding => all similarity ~1.0).
+        for i in range(5):
+            db.add_image(Path(f"/c/rec{i}.jpg"), 1.0, [make_face(seed=1)], "buffalo_l")
+        # Link a forced-only image (different embedding) to the QUERY image itself,
+        # not a recognized one, so the link fires regardless of the recognition cap.
+        db.add_image(Path("/c/query.jpg"), 1.0, [target], "buffalo_l")
+        db.add_image(Path("/c/profil.jpg"), 1.0, [make_face(seed=42)], "buffalo_l")
+        db.add_forced_clique(["/c/query.jpg", "/c/profil.jpg"])
+
+        service = FaceService(FakeEngine(), db)  # type: ignore[arg-type]
+        matches = service.find_matches(target, threshold=0.9, use_forcing=True, limit=2)
+        recognized = [m for m in matches if not m.forced]
+        forced = [m for m in matches if m.forced]
+        assert len(recognized) == 2  # recognition capped at the limit
+        # query.jpg is recognized (similarity 1.0) and within the cap; its forced
+        # link pulls in profil.jpg, which is not subject to the limit.
+        assert any(m.image_path == "/c/profil.jpg" for m in forced)
+
+
+def test_limit_none_returns_all(tmp_path: Path) -> None:
+    with FaceDatabase(tmp_path / "t.db") as db:
+        target = make_face(seed=1)
+        for i in range(5):
+            db.add_image(Path(f"/c/rec{i}.jpg"), 1.0, [make_face(seed=1)], "buffalo_l")
+        service = FaceService(FakeEngine(), db)  # type: ignore[arg-type]
+        matches = service.find_matches(target, threshold=0.9, use_forcing=False, limit=None)
+        assert len(matches) == 5
+
+
 def test_forcing_does_not_leak_unrelated_groups(tmp_path: Path) -> None:
     with FaceDatabase(tmp_path / "t.db") as db:
         face = make_face(seed=1)

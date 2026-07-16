@@ -98,28 +98,36 @@ class FaceService:
         """Detect all faces in a query image (may be outside the collection)."""
         return self._require_engine.analyze_path(image_path)
 
-    def find_matches(self, face: DetectedFace, threshold: float, *, use_forcing: bool = True) -> list[MatchRow]:
+    def find_matches(
+        self, face: DetectedFace, threshold: float, *, use_forcing: bool = True, limit: int | None = None
+    ) -> list[MatchRow]:
         """Return collection images containing the same person, best match first.
 
         Recognition matches (cosine similarity >= threshold) always apply. When
         use_forcing is set, manual force-group links are also honored and, crucially,
         propagate through recognition: any forced group that touches the query image
         or any recognized match pulls in all its other images.
+
+        limit, when set, caps the number of *recognition* matches (best first).
+        Forced matches are manual validations and are never truncated by limit.
         """
         recognized = _dedupe_by_image(self._db.search(face.embedding, self._require_engine.model_name, threshold))
         if not use_forcing:
-            return recognized
+            return recognized[:limit] if limit is not None else recognized
 
+        # Forcing propagates through the FULL recognition set (pre-limit) so a manual
+        # link is never lost just because its recognized anchor fell past the cap.
         components = _connected_components(self._db.all_forced_edges())
         seed_paths = {m.image_path for m in recognized}
         forced_paths: set[str] = set()
         for group in components:
             if group & seed_paths:
                 forced_paths |= group
-        # Forced paths not already covered by recognition become forced matches.
-        forced_only = forced_paths - seed_paths
+        # limit caps recognition rows only; forced matches are never truncated.
+        capped = recognized[:limit] if limit is not None else recognized
+        forced_only = forced_paths - {m.image_path for m in capped}
         forced_rows = [self._forced_match(path) for path in sorted(forced_only)]
-        return recognized + forced_rows
+        return capped + forced_rows
 
     def plan_path_replace(self, pattern: str, repl: str) -> RewritePlan:
         """Compute (without applying) the path rewrites for a regex substitution.
