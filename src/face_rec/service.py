@@ -84,12 +84,12 @@ class FaceService:
                 continue
             self._db.delete_image(resolved)
             try:
-                faces = self._require_engine.analyze_path(resolved)
+                faces, size = self._require_engine.analyze_path_with_size(resolved)
             except ValueError:
                 logger.warning("Skipping unreadable image %s", resolved)
                 failed += 1
                 continue
-            faces_total += self._db.add_image(resolved, mtime, faces, self._require_engine.model_name)
+            faces_total += self._db.add_image(resolved, mtime, faces, self._require_engine.model_name, size=size)
             indexed += 1
             logger.info("Indexed %s (%d face(s))", resolved.name, len(faces))
         return LoadStats(scanned, indexed, skipped, faces_total, failed)
@@ -99,7 +99,14 @@ class FaceService:
         return self._require_engine.analyze_path(image_path)
 
     def find_matches(
-        self, face: DetectedFace, threshold: float, *, use_forcing: bool = True, limit: int | None = None
+        self,
+        face: DetectedFace,
+        threshold: float,
+        *,
+        use_forcing: bool = True,
+        limit: int | None = None,
+        min_face_px: int | None = None,
+        min_face_percent: float | None = None,
     ) -> list[MatchRow]:
         """Return collection images containing the same person, best match first.
 
@@ -109,9 +116,18 @@ class FaceService:
         or any recognized match pulls in all its other images.
 
         limit, when set, caps the number of *recognition* matches (best first).
-        Forced matches are manual validations and are never truncated by limit.
+        min_face_px drops recognition matches whose face bbox is too small.
+        Forced matches are manual validations, never filtered by limit/min_face_px.
         """
-        recognized = _dedupe_by_image(self._db.search(face.embedding, self._require_engine.model_name, threshold))
+        recognized = _dedupe_by_image(
+            self._db.search(
+                face.embedding,
+                self._require_engine.model_name,
+                threshold,
+                min_face_px=min_face_px,
+                min_face_percent=min_face_percent,
+            )
+        )
         if not use_forcing:
             return recognized[:limit] if limit is not None else recognized
 

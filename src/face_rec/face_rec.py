@@ -18,7 +18,7 @@ from rich.console import Console
 from rich.table import Table
 
 from face_rec.config import Settings
-from face_rec.database import FaceDatabase
+from face_rec.database import FaceDatabase, MissingDimensionsError
 from face_rec.engine import FaceEngine
 from face_rec.logging_config import setup_logging
 from face_rec.models import DetectedFace
@@ -93,6 +93,14 @@ def group(
     limit: Annotated[
         int | None, typer.Option("--limit", "-l", help="Max recognition matches (best first). Default: unlimited.")
     ] = None,
+    min_face_px: Annotated[
+        int | None,
+        typer.Option("--min-face-px", "-m", help="Drop matches whose face bbox smaller side is below N px."),
+    ] = None,
+    min_face_percent: Annotated[
+        float | None,
+        typer.Option("--min-face-percent", help="Drop matches whose face area is below P%% of the image."),
+    ] = None,
     coords: Annotated[str | None, typer.Option(help="Pixel 'X,Y'; pick the nearest face, no prompt.")] = None,
     face_index: Annotated[int | None, typer.Option("--face", help="Explicit face index (skip the prompt).")] = None,
     as_json: Annotated[bool, typer.Option("--json", "-J", help="Emit JSON instead of a table.")] = False,
@@ -118,7 +126,18 @@ def group(
 
     if limit is not None and limit < 1:
         raise typer.BadParameter("--limit must be >= 1.")
-    settings = Settings(db_path=db, model_name=model, threshold=threshold, limit=limit)
+    if min_face_px is not None and min_face_px < 1:
+        raise typer.BadParameter("--min-face-px must be >= 1.")
+    if min_face_percent is not None and not 0.0 <= min_face_percent <= 100.0:
+        raise typer.BadParameter("--min-face-percent must be in [0, 100].")
+    settings = Settings(
+        db_path=db,
+        model_name=model,
+        threshold=threshold,
+        limit=limit,
+        min_face_px=min_face_px,
+        min_face_percent=min_face_percent,
+    )
     engine = FaceEngine(settings.model_name, settings.det_size, quiet=not verbose)
     with FaceDatabase(settings.db_path) as database:
         service = FaceService(engine, database)
@@ -129,7 +148,18 @@ def group(
             raise typer.Exit(code=1)
 
         chosen = _resolve_face(faces, point, face_index, plain=plain)
-        matches = service.find_matches(chosen, settings.threshold, use_forcing=not no_forcing, limit=settings.limit)
+        try:
+            matches = service.find_matches(
+                chosen,
+                settings.threshold,
+                use_forcing=not no_forcing,
+                limit=settings.limit,
+                min_face_px=settings.min_face_px,
+                min_face_percent=settings.min_face_percent,
+            )
+        except MissingDimensionsError as exc:
+            _err(str(exc), plain)
+            raise typer.Exit(code=1) from exc
 
     if plain:
         for m in matches:
@@ -141,6 +171,8 @@ def group(
             "query": str(image),
             "threshold": settings.threshold,
             "limit": settings.limit,
+            "min_face_px": settings.min_face_px,
+            "min_face_percent": settings.min_face_percent,
             "model": settings.model_name,
             "forcing": not no_forcing,
             "matches": [

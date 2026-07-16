@@ -11,6 +11,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_THRESHOLD = 0.40
 # Max number of recognition matches returned. None = unlimited (no silent cap).
 DEFAULT_LIMIT: int | None = None
+# Minimum face bbox smaller side (px) to keep a match. None = no size filter.
+DEFAULT_MIN_FACE_PX: int | None = None
+# Minimum face bbox area as a percentage of the image area. None = no filter.
+DEFAULT_MIN_FACE_PERCENT: float | None = None
 DEFAULT_MODEL = "buffalo_l"
 # InsightFace embeddings are 512-D for the recognition models in the buffalo packs.
 EMBEDDING_DIM = 512
@@ -27,4 +31,6 @@ class Settings(BaseSettings):
     model_name: str = DEFAULT_MODEL
     threshold: float = DEFAULT_THRESHOLD
     limit: int | None = DEFAULT_LIMIT
+    min_face_px: int | None = DEFAULT_MIN_FACE_PX
+    min_face_percent: float | None = DEFAULT_MIN_FACE_PERCENT
     det_size: int = 640

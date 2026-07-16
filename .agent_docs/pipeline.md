@@ -56,6 +56,18 @@ Défaut illimité (`DEFAULT_LIMIT=None`, même pattern que `DEFAULT_THRESHOLD`).
 forcing se propage à travers l'ensemble reconnu COMPLET (avant cap), et les matchs
 forcés ne sont jamais tronqués par `--limit`.
 
+**Filtres qualité (group)**: `--min-face-px N` (plus petit côté de bbox < N px) et
+`--min-face-percent P` (aire bbox / aire image * 100 < P%). Appliqués dans
+`database.search` sur les matchs de *reconnaissance* uniquement; les liens forcés
+passent outre (validation manuelle). Combinables (ET logique).
+
+**Dimensions d'image (schema)**: `images.width/height`, remplies au load via
+`engine.analyze_path_with_size` -> `add_image(size=(w,h))`. Migration au démarrage:
+`_migrate_image_dimensions` fait un `ALTER TABLE ADD COLUMN` idempotent (PRAGMA
+table_info). `--min-face-percent` a besoin de ces dimensions: sur une ligne
+NULL (base antérieure), `search` lève `MissingDimensionsError` et la CLI demande
+`face-rec load --reindex` (choix strict: pas de résultat approximatif).
+
 ## Sélection du visage requête (service.select_face)
 
 - `--coords X,Y`: visage dont la box contient le point, sinon le plus proche du

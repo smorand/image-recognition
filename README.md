@@ -53,9 +53,14 @@ face-rec group requete.jpg                      # N visages: table + choix inter
 face-rec group requete.jpg --face 0             # choisir un visage par index, sans prompt
 face-rec group requete.jpg --coords 320,240     # choisir le visage le plus proche du pixel
 face-rec group requete.jpg --threshold 0.5      # seuil de similarité (défaut 0.40)
+face-rec group requete.jpg --limit 20           # au plus 20 matchs de reconnaissance (défaut illimité)
+face-rec group requete.jpg --min-face-px 80     # ignorer les visages < 80 px de côté (crops upscalés)
+face-rec group requete.jpg --min-face-percent 2 # ignorer les visages < 2%% de l'aire de l'image
 face-rec group requete.jpg --json               # sortie JSON (chemins + similarité + pose)
 face-rec group requete.jpg --plain              # chemins seuls, 1 par ligne (pour le shell)
 face-rec group requete.jpg --no-forcing         # ignorer les liens manuels force-group
+
+# Alias courts (group): -D=--db  -t=--threshold  -l=--limit  -m=--min-face-px  -J=--json  -P=--plain
 
 # Ouvrir directement les images qui matchent:
 xv $(face-rec group --db faces.db requete.jpg --plain)
@@ -105,6 +110,8 @@ déjà existante) sont détectées et refusées.
 | `--model NAME` | Pack de modèles InsightFace (défaut `buffalo_l`) |
 | `--threshold F` / `-t` | Seuil de similarité cosinus 0..1 (défaut 0.40) |
 | `--limit N` / `-l` | (group) max de matchs de reconnaissance, meilleurs d'abord (défaut illimité; liens forcés jamais tronqués) |
+| `--min-face-px N` / `-m` | (group) ignore les matchs dont le plus petit côté de bbox < N px (crops upscalés) |
+| `--min-face-percent P` | (group) ignore les matchs dont l'aire du visage < P%% de l'aire de l'image; exige des dimensions stockées (`load --reindex` sur les vieilles bases) |
 | `--coords X,Y` | Sélection du visage par pixel (pas de prompt) |
 | `--face N` | Sélection du visage par index (pas de prompt) |
 | `--reindex` | Ré-indexe même les fichiers inchangés |

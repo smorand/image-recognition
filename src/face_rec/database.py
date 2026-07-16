@@ -26,6 +26,10 @@ from face_rec.models import BoundingBox, DetectedFace, Pose
 logger = logging.getLogger(__name__)
 
 
+class MissingDimensionsError(Exception):
+    """Raised when --min-face-percent needs image dimensions that were never stored."""
+
+
 @dataclass(frozen=True, slots=True)
 class FaceRow:
     """A stored face joined with its image path."""
@@ -80,7 +84,9 @@ class FaceDatabase:
             CREATE TABLE IF NOT EXISTS images (
                 id INTEGER PRIMARY KEY,
                 path TEXT NOT NULL UNIQUE,
-                mtime REAL NOT NULL
+                mtime REAL NOT NULL,
+                width INTEGER,
+                height INTEGER
             );
             CREATE TABLE IF NOT EXISTS faces (
                 id INTEGER PRIMARY KEY,
@@ -106,7 +112,20 @@ class FaceDatabase:
             f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_faces USING vec0("
             f"face_id INTEGER PRIMARY KEY, embedding FLOAT[{EMBEDDING_DIM}] distance_metric=cosine)"
         )
+        self._migrate_image_dimensions()
         self._conn.commit()
+
+    def _migrate_image_dimensions(self) -> None:
+        """Add width/height to images on bases created before percent filtering.
+
+        Existing rows keep NULL dimensions; the percent filter refuses them and asks
+        for a re-load, rather than silently producing wrong results.
+        """
+        existing = {row[1] for row in self._conn.execute("PRAGMA table_info(images)")}
+        if "width" not in existing:
+            self._conn.execute("ALTER TABLE images ADD COLUMN width INTEGER")
+        if "height" not in existing:
+            self._conn.execute("ALTER TABLE images ADD COLUMN height INTEGER")
 
     def image_is_current(self, path: Path, mtime: float) -> bool:
         """True if the image is already indexed with the same modification time."""
@@ -126,9 +145,23 @@ class FaceDatabase:
         self._conn.execute("DELETE FROM images WHERE id = ?", (image_id,))
         self._conn.commit()
 
-    def add_image(self, path: Path, mtime: float, faces: list[DetectedFace], model_name: str) -> int:
-        """Insert an image and all its faces. Returns the number of faces stored."""
-        cursor = self._conn.execute("INSERT INTO images(path, mtime) VALUES (?, ?)", (str(path), mtime))
+    def add_image(
+        self,
+        path: Path,
+        mtime: float,
+        faces: list[DetectedFace],
+        model_name: str,
+        size: tuple[int, int] | None = None,
+    ) -> int:
+        """Insert an image and all its faces. size is (width, height) in pixels.
+
+        Returns the number of faces stored.
+        """
+        width, height = size if size is not None else (None, None)
+        cursor = self._conn.execute(
+            "INSERT INTO images(path, mtime, width, height) VALUES (?, ?, ?, ?)",
+            (str(path), mtime, width, height),
+        )
         image_id = cursor.lastrowid
         for face in faces:
             face_cursor = self._conn.execute(
@@ -225,7 +258,13 @@ class FaceDatabase:
         return BoundingBox(x1=x1, y1=y1, x2=x2, y2=y2), Pose(yaw=yaw, pitch=pitch, roll=roll)
 
     def search(
-        self, embedding: NDArray[np.float32], model_name: str, threshold: float, limit: int | None = None
+        self,
+        embedding: NDArray[np.float32],
+        model_name: str,
+        threshold: float,
+        limit: int | None = None,
+        min_face_px: int | None = None,
+        min_face_percent: float | None = None,
     ) -> list[MatchRow]:
         """Return faces whose cosine similarity to embedding is >= threshold.
 
@@ -236,6 +275,12 @@ class FaceDatabase:
         *after* the KNN, k must cover the whole vec_faces table, otherwise matches
         could be truncated (a fixed cap would silently drop results on large bases
         or when a person appears in many images). Defaults to "all faces".
+
+        min_face_px drops matches whose bbox smaller side is below it (tiny/upscaled
+        crops with unreliable embeddings). min_face_percent drops matches whose bbox
+        area is below that percentage of the image area; it needs stored image
+        dimensions and raises MissingDimensionsError on a row indexed before that
+        was recorded (re-load required).
         """
         if limit is None:
             row = self._conn.execute("SELECT COUNT(*) FROM vec_faces").fetchone()
@@ -243,7 +288,8 @@ class FaceDatabase:
         query = embedding.astype(np.float32).tobytes()
         rows = self._conn.execute(
             """
-            SELECT v.face_id, v.distance, f.x1, f.y1, f.x2, f.y2, f.yaw, f.pitch, f.roll, i.path
+            SELECT v.face_id, v.distance, f.x1, f.y1, f.x2, f.y2, f.yaw, f.pitch, f.roll,
+                   i.path, i.width, i.height
             FROM vec_faces v
             JOIN faces f ON f.id = v.face_id
             JOIN images i ON i.id = f.image_id
@@ -253,10 +299,21 @@ class FaceDatabase:
             (query, limit, model_name),
         ).fetchall()
         matches: list[MatchRow] = []
-        for _face_id, distance, x1, y1, x2, y2, yaw, pitch, roll, path in rows:
+        for _face_id, distance, x1, y1, x2, y2, yaw, pitch, roll, path, img_w, img_h in rows:
             similarity = 1.0 - float(distance)
             if similarity < threshold:
                 continue
+            if min_face_px is not None and min(x2 - x1, y2 - y1) < min_face_px:
+                continue
+            if min_face_percent is not None:
+                if img_w is None or img_h is None or img_w <= 0 or img_h <= 0:
+                    raise MissingDimensionsError(
+                        f"Image '{path}' has no stored dimensions. Run 'face-rec load --reindex' "
+                        f"to enable --min-face-percent."
+                    )
+                face_pct = (x2 - x1) * (y2 - y1) / (img_w * img_h) * 100.0
+                if face_pct < min_face_percent:
+                    continue
             matches.append(
                 MatchRow(
                     image_path=path,

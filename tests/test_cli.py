@@ -32,6 +32,9 @@ class FakeEngine:
     def analyze_path(self, path: Path) -> list[Any]:
         return self._faces
 
+    def analyze_path_with_size(self, path: Path) -> tuple[list[Any], tuple[int, int]]:
+        return self._faces, (1000, 1000)
+
 
 def _patch_engine(faces: list[Any]) -> Any:
     return patch.object(cli, "FaceEngine", lambda *a, **k: FakeEngine(faces))

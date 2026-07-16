@@ -59,8 +59,14 @@ src/face_rec/
   in config). Forcing propagates through the FULL pre-limit recognition set and
   forced matches are never truncated. DB `search(limit=None)` => k = all faces in
   vec_faces (no silent 200 cap; k must cover the table since model filter is post-KNN).
-- **Short flags**: -D/--db (all cmds), -t/--threshold, -l/--limit, -J/--json,
-  -P/--plain (group).
+- **Short flags**: -D/--db (all cmds), -t/--threshold, -l/--limit, -m/--min-face-px,
+  -J/--json, -P/--plain (group).
+- **--min-face-px / --min-face-percent** (group): quality filters on recognition
+  matches only (forced links unaffected). px = bbox smaller side; percent = bbox
+  area / image area * 100. percent needs images.width/height (added by a startup
+  ALTER TABLE migration); a row indexed before that has NULL dims => the search
+  raises MissingDimensionsError and the CLI tells the user to run `load --reindex`.
+  Image size captured at load via engine.analyze_path_with_size -> add_image(size=).
 - **Model tag per embedding**: embeddings are only compared within the same
   `model_name`. Changing `--model` requires re-indexing.
 - **Cosine similarity** decides identity; sqlite-vec `distance_metric=cosine`,

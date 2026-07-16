@@ -74,10 +74,15 @@ class FaceEngine:
 
     def analyze_path(self, image_path: Path) -> list[DetectedFace]:
         """Detect and describe every face in the image file at image_path."""
+        return self.analyze_path_with_size(image_path)[0]
+
+    def analyze_path_with_size(self, image_path: Path) -> tuple[list[DetectedFace], tuple[int, int]]:
+        """Like analyze_path, but also return the image (width, height) in pixels."""
         image = cv2.imread(str(image_path))
         if image is None:
             raise ValueError(f"Cannot read image: {image_path}")
-        return self.analyze_image(image)
+        height, width = image.shape[:2]
+        return self.analyze_image(image), (int(width), int(height))
 
     def analyze_image(self, image_bgr: NDArray[np.generic]) -> list[DetectedFace]:
         """Detect and describe every face in a BGR image array."""
