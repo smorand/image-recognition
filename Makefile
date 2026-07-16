@@ -38,7 +38,7 @@ build:
 	uv build
 
 install:
-	uv tool install --force .
+	uv tool install --python 3.12 --force .   # 3.13+ has no InsightFace/onnx wheels
 
 uninstall:
 	uv tool uninstall $(APP)

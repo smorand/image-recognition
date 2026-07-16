@@ -29,9 +29,14 @@ Nécessite Python 3.12 (les wheels InsightFace/onnxruntime ne couvrent pas encor
 3.13+). `uv` gère la version automatiquement.
 
 ```bash
-make sync              # installe les dépendances dans .venv
-make install           # installe la commande face-rec globalement (uv tool)
+make sync              # installe les dépendances dans .venv (Python 3.12)
+make install           # installe la commande face-rec globalement (uv tool, Python 3.12)
 ```
+
+`make install` épingle **Python 3.12** (`uv tool install --python 3.12`). Ne pas
+faire `uv tool install .` nu: uv prendrait le Python global (3.14 ici), pour lequel
+il n'existe pas de wheels InsightFace/onnx, et l'import casse au runtime
+(`ml_dtypes.float4_e2m1fn`, conflit onnx/ml_dtypes).
 
 Au premier `load`, InsightFace télécharge le pack de modèles (~330 Mo) dans
 `~/.cache/models/insightface`.
