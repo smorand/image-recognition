@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import sys
+import os
+import warnings
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -20,14 +21,25 @@ logger = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
-def _silence_stdout() -> Iterator[None]:
-    """Redirect stdout to stderr so InsightFace's prints never corrupt JSON output."""
-    saved = sys.stdout
-    sys.stdout = sys.stderr
-    try:
+def _quiet(enabled: bool) -> Iterator[None]:
+    """Suppress InsightFace noise unless the caller asked for verbose output.
+
+    InsightFace prints model-loading banners to stdout and emits numpy/skimage
+    FutureWarnings during alignment. When enabled, both stdout and stderr are
+    redirected to os.devnull and warnings are silenced for the duration. When
+    disabled (verbose), everything passes through untouched.
+    """
+    if not enabled:
         yield
-    finally:
-        sys.stdout = saved
+        return
+    with (
+        Path(os.devnull).open("w") as devnull,
+        contextlib.redirect_stdout(devnull),
+        contextlib.redirect_stderr(devnull),
+        warnings.catch_warnings(),
+    ):
+        warnings.simplefilter("ignore")
+        yield
 
 
 def _normalize(vector: NDArray[np.float32]) -> NDArray[np.float32]:
@@ -45,13 +57,14 @@ class FaceEngine:
     provider explicitly; ctx_id=-1 selects CPU inside InsightFace.
     """
 
-    __slots__ = ("_app", "model_name")
+    __slots__ = ("_app", "_quiet", "model_name")
 
-    def __init__(self, model_name: str, det_size: int = 640) -> None:
+    def __init__(self, model_name: str, det_size: int = 640, *, quiet: bool = True) -> None:
         self.model_name = model_name
+        self._quiet = quiet
         logger.info("Loading InsightFace model pack %s from %s", model_name, MODEL_ROOT)
         MODEL_ROOT.mkdir(parents=True, exist_ok=True)
-        with _silence_stdout():
+        with _quiet(self._quiet):
             self._app = FaceAnalysis(
                 name=model_name,
                 root=str(MODEL_ROOT),
@@ -68,7 +81,7 @@ class FaceEngine:
 
     def analyze_image(self, image_bgr: NDArray[np.generic]) -> list[DetectedFace]:
         """Detect and describe every face in a BGR image array."""
-        with _silence_stdout():
+        with _quiet(self._quiet):
             faces = self._app.get(image_bgr)
         results: list[DetectedFace] = []
         for face in faces:

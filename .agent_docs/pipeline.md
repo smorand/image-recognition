@@ -66,9 +66,12 @@ forcés ne sont jamais tronqués par `--limit`.
 
 ## Gotchas
 
-- **stdout pollué**: InsightFace fait des `print()` au chargement et à l'inférence.
-  `_silence_stdout()` redirige stdout→stderr pendant `prepare` et `get`, sinon
-  `group --json` produit du JSON invalide. Ne jamais retirer ce garde.
+- **Bruit InsightFace supprimé par défaut**: `print()` de chargement (`find model`,
+  `Applied providers`, `set det-size`) ET FutureWarnings numpy/skimage émis pendant
+  l'alignement. `engine._quiet(enabled)` redirige stdout+stderr vers os.devnull et
+  fait `warnings.simplefilter('ignore')` pendant `prepare` et `get`.
+  `FaceEngine(..., quiet=not verbose)`: `-v` réactive tout (debug). Garde aussi
+  `--plain`/`--json` propres. Ne jamais retirer ce garde.
 - **Cache modèle**: InsightFace lit l'argument `root=` (pas `INSIGHTFACE_HOME`).
   On passe `root=~/.cache/models/insightface`; les modèles vont dans
   `<root>/models/buffalo_l/`. Au 1er run, download ~330 Mo.

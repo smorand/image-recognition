@@ -66,8 +66,10 @@ src/face_rec/
 - **Cosine similarity** decides identity; sqlite-vec `distance_metric=cosine`,
   similarity = 1 - distance. Default threshold 0.40 (relever pour vérification).
 - **Embeddings L2-normalized** in the engine before storage.
-- **stdout is sacred** in `group --json`: InsightFace prints are redirected to
-  stderr via `_silence_stdout()` so JSON stays parseable.
+- **InsightFace noise is suppressed by default**: `engine._quiet(enabled)` redirects
+  stdout+stderr to os.devnull AND silences warnings (numpy/skimage FutureWarnings)
+  during model load and inference. `FaceEngine(..., quiet=not verbose)`: `-v` lets
+  the banners/warnings through for debugging. Keeps `--plain`/`--json` stdout clean.
 - **Model cache**: `~/.cache/models/insightface` (passed as `root=` to
   FaceAnalysis; InsightFace ignores env vars for this).
 - **CPU only** (Mac): `providers=["CPUExecutionProvider"]`, `ctx_id=-1`.

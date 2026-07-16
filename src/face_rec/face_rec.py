@@ -74,7 +74,7 @@ def load(
     if not folder.is_dir():
         raise typer.BadParameter(f"Not a directory: {folder}")
     settings = Settings(db_path=db, model_name=model)
-    engine = FaceEngine(settings.model_name, settings.det_size)
+    engine = FaceEngine(settings.model_name, settings.det_size, quiet=not verbose)
     with FaceDatabase(settings.db_path) as database:
         service = FaceService(engine, database)
         stats = service.load_collection(folder, reindex=reindex)
@@ -119,7 +119,7 @@ def group(
     if limit is not None and limit < 1:
         raise typer.BadParameter("--limit must be >= 1.")
     settings = Settings(db_path=db, model_name=model, threshold=threshold, limit=limit)
-    engine = FaceEngine(settings.model_name, settings.det_size)
+    engine = FaceEngine(settings.model_name, settings.det_size, quiet=not verbose)
     with FaceDatabase(settings.db_path) as database:
         service = FaceService(engine, database)
         faces = service.detect_query_faces(image)
@@ -238,7 +238,7 @@ def force_group(
     through recognition at query time. Links persist across re-load (keyed by path).
     """
     setup_logging(verbose)
-    engine = FaceEngine(model)
+    engine = FaceEngine(model, quiet=not verbose)
     with FaceDatabase(db) as database:
         service = FaceService(engine, database)
         try:
