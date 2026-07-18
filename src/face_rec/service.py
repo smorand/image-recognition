@@ -49,6 +49,7 @@ class LoadStats:
     images_skipped: int
     faces_stored: int
     images_failed: int
+    images_pruned: int = 0
 
 
 class FaceService:
@@ -71,7 +72,15 @@ class FaceService:
         return self._engine
 
     def load_collection(self, folder: Path, *, reindex: bool = False) -> LoadStats:
-        """Index every image under folder. Skips unchanged files unless reindex is set."""
+        """Index every image under folder. Skips unchanged files unless reindex is set.
+
+        Before scanning, prunes any previously-indexed image whose file no longer
+        exists on disk (moved/deleted outside the tool), across the whole database,
+        not just this folder, so stale entries never linger.
+        """
+        pruned = self._db.prune_missing_images()
+        for path in pruned:
+            logger.warning("Pruned missing file from database: %s", path)
         scanned = indexed = skipped = failed = faces_total = 0
         for image_path in _iter_images(folder):
             scanned += 1
@@ -92,7 +101,7 @@ class FaceService:
             faces_total += self._db.add_image(resolved, mtime, faces, self._require_engine.model_name, size=size)
             indexed += 1
             logger.info("Indexed %s (%d face(s))", resolved.name, len(faces))
-        return LoadStats(scanned, indexed, skipped, faces_total, failed)
+        return LoadStats(scanned, indexed, skipped, faces_total, failed, len(pruned))
 
     def detect_query_faces(self, image_path: Path) -> list[DetectedFace]:
         """Detect all faces in a query image (may be outside the collection)."""

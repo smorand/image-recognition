@@ -223,6 +223,19 @@ class FaceDatabase:
         """Every image path currently indexed."""
         return [row[0] for row in self._conn.execute("SELECT path FROM images ORDER BY path")]
 
+    def prune_missing_images(self) -> list[str]:
+        """Remove every indexed image whose file no longer exists on disk.
+
+        Keeps the database honest after files are moved or deleted outside the
+        tool: a stale row would otherwise keep matching in searches against an
+        image that is no longer there. Cascades to that image's faces and
+        embeddings via delete_image. Returns the removed paths.
+        """
+        missing = [path for path in self.all_image_paths() if not Path(path).exists()]
+        for path in missing:
+            self.delete_image(Path(path))
+        return missing
+
     def apply_path_rewrites(self, mapping: dict[str, str]) -> None:
         """Rewrite image and forced-link paths according to mapping (old -> new).
 

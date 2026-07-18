@@ -31,6 +31,32 @@ def test_image_is_current_and_delete(tmp_path: Path) -> None:
         assert db.count_faces("buffalo_l") == 0
 
 
+def test_prune_missing_images_removes_only_absent_files(tmp_path: Path) -> None:
+    present = tmp_path / "present.jpg"
+    present.write_bytes(b"x")
+    missing = tmp_path / "missing.jpg"
+    missing.write_bytes(b"x")
+    with FaceDatabase(tmp_path / "t.db") as db:
+        db.add_image(present, 1.0, [make_face(seed=1)], "buffalo_l")
+        db.add_image(missing, 1.0, [make_face(seed=2)], "buffalo_l")
+        missing.unlink()  # simulate the file being deleted/moved outside the tool
+
+        removed = db.prune_missing_images()
+
+        assert removed == [str(missing)]
+        assert db.all_image_paths() == [str(present)]
+        assert db.count_faces("buffalo_l") == 1  # missing image's face cascaded away
+
+
+def test_prune_missing_images_noop_when_all_present(tmp_path: Path) -> None:
+    present = tmp_path / "present.jpg"
+    present.write_bytes(b"x")
+    with FaceDatabase(tmp_path / "t.db") as db:
+        db.add_image(present, 1.0, [make_face(seed=1)], "buffalo_l")
+        assert db.prune_missing_images() == []
+        assert db.all_image_paths() == [str(present)]
+
+
 def test_search_finds_exact_and_respects_threshold(tmp_path: Path) -> None:
     with FaceDatabase(tmp_path / "t.db") as db:
         target = make_face(seed=1)

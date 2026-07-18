@@ -14,7 +14,9 @@ def setup_logging(verbosity: int = 0) -> None:
     """Configure root logging. verbosity: 0=WARNING, 1=INFO, 2+=DEBUG."""
     level = {0: logging.WARNING, 1: logging.INFO}.get(verbosity, logging.DEBUG)
 
-    console_handler = RichHandler(rich_tracebacks=True, show_path=False)
+    # omit_repeated_times=False: always print the timestamp, even when identical
+    # to the previous line (Rich's default hides repeats to reduce clutter).
+    console_handler = RichHandler(rich_tracebacks=True, show_path=False, omit_repeated_times=False)
     console_handler.setLevel(level)
 
     file_handler = logging.FileHandler(Path(LOG_FILE), encoding="utf-8")

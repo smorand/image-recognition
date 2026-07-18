@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import io
 import logging
 import os
 import warnings
@@ -22,24 +23,31 @@ logger = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def _quiet(enabled: bool) -> Iterator[None]:
-    """Suppress InsightFace noise unless the caller asked for verbose output.
+    """Silence InsightFace/onnxruntime noise; always drop warnings, re-log banners.
 
     InsightFace prints model-loading banners to stdout and emits numpy/skimage
-    FutureWarnings during alignment. When enabled, both stdout and stderr are
-    redirected to os.devnull and warnings are silenced for the duration. When
-    disabled (verbose), everything passes through untouched.
+    FutureWarnings during alignment. The FutureWarnings are never useful and are
+    always suppressed, regardless of verbosity. The stdout banners are either
+    discarded (enabled=True, i.e. quiet mode) or captured and re-emitted line by
+    line through the logger (enabled=False, i.e. verbose mode) so every line
+    still carries a timestamp instead of printing raw and unformatted.
     """
-    if not enabled:
-        yield
-        return
-    with (
-        Path(os.devnull).open("w") as devnull,
-        contextlib.redirect_stdout(devnull),
-        contextlib.redirect_stderr(devnull),
-        warnings.catch_warnings(),
-    ):
+    with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        yield
+        if enabled:
+            with (
+                Path(os.devnull).open("w") as devnull,
+                contextlib.redirect_stdout(devnull),
+                contextlib.redirect_stderr(devnull),
+            ):
+                yield
+            return
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
+            yield
+        for line in buffer.getvalue().splitlines():
+            if line.strip():
+                logger.info(line)
 
 
 def _normalize(vector: NDArray[np.float32]) -> NDArray[np.float32]:

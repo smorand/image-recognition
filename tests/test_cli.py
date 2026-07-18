@@ -115,6 +115,33 @@ def test_group_bad_coords(tmp_path: Path) -> None:
     assert result.exit_code != 0
 
 
+def test_load_prunes_files_deleted_since_last_load(tmp_path: Path) -> None:
+    db_path = tmp_path / "faces.db"
+    collection = tmp_path / "coll"
+    collection.mkdir()
+    stays = collection / "a.jpg"
+    goes = collection / "b.jpg"
+    stays.write_bytes(b"fake")
+    goes.write_bytes(b"fake")
+
+    with _patch_engine([make_face(seed=1)]):
+        first = runner.invoke(cli.app, ["load", str(collection), "--db", str(db_path)])
+        assert first.exit_code == 0, first.stdout
+        assert "indexed=2" in first.stdout
+        assert "pruned=0" in first.stdout
+
+        goes.unlink()  # file removed from disk between the two loads
+
+        second = runner.invoke(cli.app, ["load", str(collection), "--db", str(db_path)])
+        assert second.exit_code == 0, second.stdout
+        assert "pruned=1" in second.stdout
+
+    with FaceDatabase(db_path) as db:
+        paths = db.all_image_paths()
+        assert str(stays.resolve()) in paths
+        assert str(goes.resolve()) not in paths
+
+
 def test_load_not_a_directory(tmp_path: Path) -> None:
     f = tmp_path / "file.txt"
     f.write_text("x")

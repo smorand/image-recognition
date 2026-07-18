@@ -80,7 +80,8 @@ def load(
         stats = service.load_collection(folder, reindex=reindex)
     console.print(
         f"[green]Done.[/green] scanned={stats.images_scanned} indexed={stats.images_indexed} "
-        f"skipped={stats.images_skipped} failed={stats.images_failed} faces={stats.faces_stored}"
+        f"skipped={stats.images_skipped} failed={stats.images_failed} faces={stats.faces_stored} "
+        f"pruned={stats.images_pruned}"
     )
 
 
